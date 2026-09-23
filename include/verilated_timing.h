@@ -142,19 +142,19 @@ public:
     VlCoroutineHandle(std::coroutine_handle<VlPromise> coro, VlProcessRef process,
                       VlFileLineDebug fileline)
         : m_coro{coro}
-        , m_process{process}
+        , m_process{std::move(process)}
         , m_fileline{fileline} {
         if (m_process) m_process->state(VlProcess::WAITING);
     }
     // Move the handle, leaving a nullptr
     // non-explicit:
     // cppcheck-suppress noExplicitConstructor
-    VlCoroutineHandle(VlCoroutineHandle&& moved)
+    VL_ATTR_ALWINLINE VlCoroutineHandle(VlCoroutineHandle&& moved)
         : m_coro{std::exchange(moved.m_coro, nullptr)}
         , m_process{std::exchange(moved.m_process, nullptr)}
         , m_fileline{moved.m_fileline} {}
     // Destroy if the handle isn't null
-    ~VlCoroutineHandle() {
+    VL_ATTR_ALWINLINE ~VlCoroutineHandle() {
         // Usually these coroutines should get resumed; we only need to clean up if we destroy a
         // model with some coroutines suspended
         if (VL_UNLIKELY(m_coro)) {
@@ -167,7 +167,7 @@ public:
     }
     // METHODS
     // Move the handle, leaving a null handle
-    auto& operator=(VlCoroutineHandle&& moved) {
+    VL_ATTR_ALWINLINE auto& operator=(VlCoroutineHandle&& moved) {
         m_coro = std::exchange(moved.m_coro, nullptr);
         m_process = std::exchange(moved.m_process, nullptr);
         m_fileline = moved.m_fileline;
@@ -244,9 +244,10 @@ public:
             void await_suspend(std::coroutine_handle<VlPromise> coro) {
                 // Both active delays and fork..join_none #0 are resumed out of the time queue.
                 if (phase != VlDelayPhase::INACTIVE) {
-                    queue.emplace(delay, VlCoroutineHandle{coro, process, fileline});
+                    queue.emplace(delay, VlCoroutineHandle{coro, std::move(process), fileline});
                 } else {
-                    queueZeroDelay.emplace_back(VlCoroutineHandle{coro, process, fileline});
+                    queueZeroDelay.emplace_back(
+                        VlCoroutineHandle{coro, std::move(process), fileline});
                 }
             }
             void await_resume() const {}
@@ -260,9 +261,9 @@ public:
         } else {
             phase = VlDelayPhase::INACTIVE;
         }
-        return Awaitable{process,       m_queue,
-                         m_zeroDelayed, m_context.time() + delay,
-                         phase,         VlFileLineDebug{filename, lineno}};
+        return Awaitable{std::move(process), m_queue,
+                         m_zeroDelayed,      m_context.time() + delay,
+                         phase,              VlFileLineDebug{filename, lineno}};
     }
 
     // Helper awaitable func for suspending coroutines forever.
