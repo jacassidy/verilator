@@ -2516,18 +2516,11 @@ inline WDataOutP VL_SHIFTL_WWI(int obits, int, int, WDataOutP owp, WDataInP cons
     if (rd >= static_cast<IData>(obits)) {  // rd may be huge with MSB set
         for (int i = 0; i < VL_WORDS_I(obits); ++i) owp[i] = 0;
     } else if (bit_shift == 0) {  // Aligned word shift (<<0,<<32,<<64 etc)
-        for (int i = VL_WORDS_I(obits) - 1; i >= word_shift; --i) owp[i] = lwp[i - word_shift];
         for (int i = 0; i < word_shift; ++i) owp[i] = 0;
+        for (int i = word_shift; i < VL_WORDS_I(obits); ++i) owp[i] = lwp[i - word_shift];
     } else {
-        const int words = VL_WORDS_I(obits);
-        const int bits_on_right = VL_EDATASIZE - bit_shift;
-        for (int i = words - 1; i > word_shift; --i) {
-            const int src = i - word_shift;
-            owp[i] = (lwp[src] << bit_shift) | (lwp[src - 1] >> bits_on_right);
-        }
-        owp[word_shift] = lwp[0] << bit_shift;
-        for (int i = 0; i < word_shift; ++i) owp[i] = 0;
-        owp[words - 1] &= VL_MASK_E(obits);
+        for (int i = 0; i < VL_WORDS_I(obits); ++i) owp[i] = 0;
+        _vl_insert_WW(owp, lwp, obits - 1, rd);
     }
     return owp;
 }
