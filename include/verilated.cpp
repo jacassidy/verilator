@@ -4063,7 +4063,7 @@ void Verilated::endOfEval(VerilatedEvalMsgQueue* evalMsgQp) VL_MT_SAFE {
     // It should be ok to call into endOfEvalGuts, it returns immediately
     // if there are no transactions.
     VL_DEBUG_IF(VL_DBG_MSGF("End-of-eval cleanup\n"););
-    VerilatedThreadMsgQueue::flush(evalMsgQp);
+    if (VL_UNLIKELY(t_s.t_endOfEvalReqd)) VerilatedThreadMsgQueue::flush(evalMsgQp);
     evalMsgQp->process();
 }
 
@@ -4097,6 +4097,12 @@ void VerilatedEvalLoop::evalImpl() {
         m_profilerp->sectionPush("eval");
     }
 
+#ifdef VL_DEBUG
+    const uint32_t liveRegions = REGION_ALL;
+#else
+    const uint32_t liveRegions = m_liveRegions;
+#endif
+
     m_model.evalBegin();
 
     // Initialization on first time step only
@@ -4115,7 +4121,7 @@ void VerilatedEvalLoop::evalImpl() {
     }
 
     // Sampled values are collected before anything can read them
-    m_model.evalSample();
+    if (liveRegions & REGION_SAMPLE) m_model.evalSample();
 
     // The 'Input combinational' region updates combinational logic driven from primary inputs
     {
@@ -4151,19 +4157,19 @@ void VerilatedEvalLoop::evalImpl() {
                     do {
                         checkConvergence(++actIterCount, "Active",
                                          &VerilatedModel::dumpTriggersAct);
-                    } while (m_model.evalAct());
+                    } while ((liveRegions & REGION_ACT) && m_model.evalAct());
                     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop act
-                } while (m_model.evalInact());
+                } while ((liveRegions & REGION_INACT) && m_model.evalInact());
                 if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop inact
-            } while (m_model.evalNba());
+            } while ((liveRegions & REGION_NBA) && m_model.evalNba());
             if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop nba
-        } while (m_model.evalObs());
+        } while ((liveRegions & REGION_OBS) && m_model.evalObs());
         if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop obs
-    } while (m_model.evalReact());
+    } while ((liveRegions & REGION_REACT) && m_model.evalReact());
     if VL_CONSTEXPR_CXX17 (Profiling) m_profilerp->sectionPop();  // loop react
 
     // The 'Postponed' region runs once, at the end of the time step
-    m_model.evalPostponed();
+    if (liveRegions & REGION_POSTPONED) m_model.evalPostponed();
 
     m_model.evalEnd();
 
@@ -4537,12 +4543,13 @@ void VerilatedAssertOneThread::fatal_different() VL_MT_SAFE {
 // VlDeleter:: Methods
 
 void VlDeleter::deleteAll() VL_EXCLUDES(m_mutex) VL_EXCLUDES(m_deleteMutex) VL_MT_SAFE {
-    while (true) {
+    while (m_hasNewGarbage.load(std::memory_order_acquire)) {
         {
             const VerilatedLockGuard lock{m_mutex};
             if (m_newGarbage.empty()) break;
             m_deleteMutex.lock();
             std::swap(m_newGarbage, m_deleteNow);
+            m_hasNewGarbage.store(false, std::memory_order_relaxed);
             // m_mutex is unlocked here, so destructors can enqueue new objects
         }
         for (VlDeletable* const objp : m_deleteNow) delete objp;

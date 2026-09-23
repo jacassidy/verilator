@@ -2022,6 +2022,7 @@ class VlDeleter final {
     std::vector<VlDeletable*> m_deleteNow VL_GUARDED_BY(m_deleteMutex);
     mutable VerilatedMutex m_mutex;  // Mutex protecting the 'new garbage' queue
     mutable VerilatedMutex m_deleteMutex;  // Mutex protecting the delete queue
+    std::atomic<bool> m_hasNewGarbage{false};
 
 public:
     // CONSTRUCTOR
@@ -2037,6 +2038,7 @@ public:
     void put(VlDeletable* const objp) VL_MT_SAFE {
         const VerilatedLockGuard lock{m_mutex};
         m_newGarbage.push_back(objp);
+        m_hasNewGarbage.store(true, std::memory_order_release);
     }
 
     // Deletes all queued garbage objects.
