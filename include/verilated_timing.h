@@ -190,11 +190,12 @@ class VlDelayScheduler final {
     // TYPES
     // Time-sorted queue of timestamps and handles
     using VlDelayedCoroutineQueue = std::multimap<uint64_t, VlCoroutineHandle>;
+    static constexpr size_t MAX_SPARE_NODES = 64;
 
     // MEMBERS
     VerilatedContext& m_context;
     VlDelayedCoroutineQueue m_queue;  // Coroutines to be restored at a certain simulation time
-    // Nodes extracted from m_queue on resume, reused for the next delays to avoid reallocations
+    // Bounded cache of extracted nodes, reused for subsequent delays to avoid allocations
     std::vector<VlDelayedCoroutineQueue::node_type> m_spareNodes;
     std::vector<VlCoroutineHandle> m_zeroDelayed;  // Coroutines waiting for #0
     // Coroutines that waited for #0 and are being resumed now. As member to avoid reallocations
