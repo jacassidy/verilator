@@ -230,22 +230,15 @@ class V3DfgPeephole final : public DfgVisitor {
     // Add vertex to the cache. If an equivalent (but different) vertex is
     // already cached, it is returned and the cache is not updated.
     DfgVertex* cacheVertex(DfgVertex* vtxp) {
-        // A replacement may visit an unchanged sink or the same sink through
-        // multiple input edges. Neither needs another hash table insertion.
-        if (m_vInfo[vtxp].m_isCachedVertex) {
-            UDEBUGONLY(UASSERT_OBJ(!m_cache.cache(vtxp), vtxp,
-                                   "Vertex marked 'm_isCachedVertex' has a cached equivalent"););
-            return nullptr;
-        }
         DfgVertex* const equivp = m_cache.cache(vtxp);
+        UASSERT_OBJ(!m_vInfo[vtxp].m_isCachedVertex || !equivp, vtxp,
+                    "Vertex marked 'm_isCachedVertex' has a cached equivalent");
         m_vInfo[vtxp].m_isCachedVertex = !equivp;
         return equivp;
     }
 
     // Remove vertex from the cache (no-op if it is not the cached vertex)
     void invalidateVertex(DfgVertex* vtxp) {
-        // Only the vertex selected as the cached representative can have an entry.
-        if (!m_vInfo[vtxp].m_isCachedVertex) return;
         m_cache.invalidate(vtxp);
         m_vInfo[vtxp].m_isCachedVertex = false;
     }
